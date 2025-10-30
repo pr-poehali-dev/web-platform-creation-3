@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,9 +8,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
+
+const API_URL = 'https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf';
 
 const Index = () => {
+  const { toast } = useToast();
+  const [user, setUser] = useState<any>(null);
   const [balance, setBalance] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('card');
   const [showMenu, setShowMenu] = useState(false);
   const [showCardDialog, setShowCardDialog] = useState(false);
@@ -20,7 +27,76 @@ const Index = () => {
   const [showDepositDialog, setShowDepositDialog] = useState(false);
   const [showBoostDialog, setShowBoostDialog] = useState(false);
 
-  const referralCode = 'REF_12345ABC';
+  const DEMO_TELEGRAM_ID = 'demo_user_' + Math.random().toString(36).substr(2, 9);
+
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    try {
+      const response = await fetch(`${API_URL}?path=user&telegram_id=${DEMO_TELEGRAM_ID}`);
+      const userData = await response.json();
+      setUser(userData);
+      setBalance(parseFloat(userData.balance || 0));
+      loadTransactions(userData.id);
+    } catch (error) {
+      console.error('Error loading user:', error);
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось загрузить данные пользователя',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTransactions = async (userId: number) => {
+    try {
+      const response = await fetch(`${API_URL}?path=transactions&user_id=${userId}`);
+      const data = await response.json();
+      setTransactions(data);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
+
+  const addTransaction = async (type: string, amount: number, description: string) => {
+    if (!user) return;
+
+    try {
+      const response = await fetch(`${API_URL}?path=transaction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.id,
+          type,
+          amount,
+          description
+        })
+      });
+
+      if (response.ok) {
+        await loadUser();
+        toast({
+          title: 'Успешно!',
+          description: 'Операция выполнена',
+        });
+        return true;
+      }
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось выполнить операцию',
+        variant: 'destructive'
+      });
+    }
+    return false;
+  };
+
+  const referralCode = user?.referral_code || 'LOADING...';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-orange-50">
@@ -80,9 +156,19 @@ const Index = () => {
         <div className="mb-8 text-center animate-slide-up">
           <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full gradient-card border border-purple-300 mb-4">
             <Icon name="Wallet" size={24} className="text-primary" />
-            <span className="text-3xl font-bold text-gradient">{balance} ₽</span>
+            <span className="text-3xl font-bold text-gradient">{loading ? '...' : balance.toFixed(2)} ₽</span>
           </div>
           <p className="text-muted-foreground">Твой баланс</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2"
+            onClick={() => addTransaction('card_bonus', 500, 'Демо-бонус за карту')}
+            disabled={loading}
+          >
+            <Icon name="Gift" size={16} className="mr-2" />
+            Получить демо-бонус 500₽
+          </Button>
         </div>
 
         <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
@@ -255,16 +341,34 @@ const Index = () => {
           <div className="space-y-4">
             <div className="text-center p-6 rounded-xl gradient-card border border-purple-200">
               <Icon name="Wallet" size={48} className="mx-auto mb-3 text-primary" />
-              <p className="text-4xl font-bold text-gradient mb-2">{balance} ₽</p>
+              <p className="text-4xl font-bold text-gradient mb-2">{balance.toFixed(2)} ₽</p>
               <p className="text-sm text-muted-foreground">Доступно для вывода</p>
             </div>
             
             <div className="space-y-2">
               <h4 className="font-medium text-sm text-muted-foreground">Последние операции</h4>
-              <div className="text-center py-8 text-muted-foreground">
-                <Icon name="Receipt" size={32} className="mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Пока нет операций</p>
-              </div>
+              {transactions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Icon name="Receipt" size={32} className="mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Пока нет операций</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {transactions.map((tx) => (
+                    <div key={tx.id} className="p-3 rounded-lg bg-purple-50 flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-sm">{tx.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(tx.created_at).toLocaleDateString('ru-RU')}
+                        </p>
+                      </div>
+                      <p className={`font-bold ${parseFloat(tx.amount) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {parseFloat(tx.amount) > 0 ? '+' : ''}{parseFloat(tx.amount).toFixed(2)} ₽
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </DialogContent>
