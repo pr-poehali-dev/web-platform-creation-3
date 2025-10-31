@@ -21,10 +21,25 @@ const TelegramBot = () => {
   const [showPartners, setShowPartners] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [investmentAmount, setInvestmentAmount] = useState('');
   const [calculatorAmount, setCalculatorAmount] = useState('');
   const [calculatorDays, setCalculatorDays] = useState('30');
   const [depositAmount, setDepositAmount] = useState('');
+  const [botSettings, setBotSettings] = useState({
+    investmentPercent: 3,
+    adminTelegram: '@admin',
+    channelUrl: 'https://t.me/yourchannel',
+    chatUrl: 'https://t.me/yourchat',
+    requireSubscription: true,
+    requiredChannels: [] as string[],
+    requiredChats: [] as string[],
+    requiredBots: [] as string[],
+    botStatus: 'running',
+    paymentBot: '@CryptoBot',
+    withdrawBot: '@CryptoBot',
+  });
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
@@ -35,9 +50,30 @@ const TelegramBot = () => {
       if (user) {
         setUserId(user.id.toString());
         loadUserData(user.id.toString());
+        // Проверка на админа (замени на свой ID)
+        if (user.id.toString() === '123456789') {
+          setIsAdmin(true);
+        }
       }
     }
+    loadBotSettings();
   }, []);
+  
+  const loadBotSettings = () => {
+    const saved = localStorage.getItem('bot_settings');
+    if (saved) {
+      setBotSettings(JSON.parse(saved));
+    }
+  };
+  
+  const saveBotSettings = (settings: any) => {
+    setBotSettings(settings);
+    localStorage.setItem('bot_settings', JSON.stringify(settings));
+    toast({
+      title: 'Сохранено!',
+      description: 'Настройки бота обновлены',
+    });
+  };
 
   const loadUserData = async (id: string) => {
     const savedData = localStorage.getItem(`user_${id}`);
@@ -104,7 +140,7 @@ const TelegramBot = () => {
   };
 
   const handleCollect = async () => {
-    const profit = userData.activeInvestment?.amount * 0.01 || 0;
+    const profit = (userData.activeInvestment?.amount * botSettings.investmentPercent / 100) || 0;
     toast({
       title: 'Собрано!',
       description: `Вы получили ${profit.toFixed(2)} ₽`,
@@ -202,6 +238,16 @@ const TelegramBot = () => {
           <span className="text-sm">⚙️ Настройки</span>
         </Button>
       </div>
+      
+      {isAdmin && (
+        <Button 
+          className="w-full h-16 bg-red-600 hover:bg-red-700 text-white mt-4"
+          onClick={() => setShowAdminPanel(true)}
+        >
+          <Icon name="Shield" size={20} className="mr-2" />
+          🔧 Панель администратора
+        </Button>
+      )}
     </div>
   );
 
@@ -222,7 +268,7 @@ const TelegramBot = () => {
         <CardContent className="space-y-3">
           <div className="flex items-center gap-2">
             <Icon name="Percent" size={18} />
-            <p>Процент прибыли: <span className="font-bold">1%</span></p>
+            <p>Процент прибыли: <span className="font-bold">{botSettings.investmentPercent}%</span></p>
           </div>
           <div className="flex items-center gap-2">
             <Icon name="Clock" size={18} />
@@ -366,9 +412,11 @@ const TelegramBot = () => {
                 onClick={() => {
                   const amount = parseFloat(depositAmount);
                   if (amount > 0) {
+                    const paymentUrl = `https://t.me/${botSettings.paymentBot.replace('@', '')}?start=pay_${amount}_${userId}`;
+                    window.open(paymentUrl, '_blank');
                     toast({
                       title: 'Переход к оплате',
-                      description: `Сумма: ${amount} ₽ (Банковская карта)`,
+                      description: `Открываем ${botSettings.paymentBot}...`,
                     });
                   }
                 }}
@@ -385,9 +433,11 @@ const TelegramBot = () => {
                 onClick={() => {
                   const amount = parseFloat(depositAmount);
                   if (amount > 0) {
+                    const paymentUrl = `https://t.me/${botSettings.paymentBot.replace('@', '')}?start=sbp_${amount}_${userId}`;
+                    window.open(paymentUrl, '_blank');
                     toast({
                       title: 'Переход к оплате',
-                      description: `Сумма: ${amount} ₽ (СБП)`,
+                      description: `Открываем ${botSettings.paymentBot}...`,
                     });
                   }
                 }}
@@ -412,9 +462,11 @@ const TelegramBot = () => {
               className="w-full h-14" 
               variant="default"
               onClick={() => {
+                const withdrawUrl = `https://t.me/${botSettings.withdrawBot.replace('@', '')}?start=withdraw_${userData.withdrawBalance}_${userId}`;
+                window.open(withdrawUrl, '_blank');
                 toast({
-                  title: 'Заявка на вывод',
-                  description: `Доступно: ${userData.withdrawBalance.toFixed(2)} ₽`,
+                  title: 'Переход к выводу',
+                  description: `Открываем ${botSettings.withdrawBot}...`,
                 });
               }}
             >
@@ -433,7 +485,7 @@ const TelegramBot = () => {
   const CalculatorScreen = () => {
     const amount = parseFloat(calculatorAmount) || 0;
     const days = parseInt(calculatorDays) || 1;
-    const dailyProfit = amount * 0.01;
+    const dailyProfit = amount * (botSettings.investmentPercent / 100);
     const totalProfit = dailyProfit * days;
     const totalAmount = amount + totalProfit;
 
@@ -481,7 +533,7 @@ const TelegramBot = () => {
 
             <div className="space-y-3 p-4 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-700">Ежедневный доход (1%):</span>
+                <span className="text-sm text-gray-700">Ежедневный доход ({botSettings.investmentPercent}%):</span>
                 <span className="font-bold text-green-700">{dailyProfit.toFixed(2)} ₽</span>
               </div>
               <div className="flex justify-between items-center">
@@ -497,7 +549,7 @@ const TelegramBot = () => {
 
             <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
               <Icon name="Info" size={16} className="inline mr-2" />
-              Расчёт производится по ставке 1% в сутки
+              Расчёт производится по ставке {botSettings.investmentPercent}% в сутки
             </div>
           </CardContent>
         </Card>
@@ -523,7 +575,7 @@ const TelegramBot = () => {
           <Button
             variant="outline"
             className="w-full justify-start h-auto py-4"
-            onClick={() => window.open('https://t.me/admin', '_blank')}
+            onClick={() => window.open(`https://t.me/${botSettings.adminTelegram.replace('@', '')}`, '_blank')}
           >
             <Icon name="UserCog" size={24} className="mr-3" />
             <div className="text-left">
@@ -535,7 +587,7 @@ const TelegramBot = () => {
           <Button
             variant="outline"
             className="w-full justify-start h-auto py-4"
-            onClick={() => window.open('https://t.me/yourchannel', '_blank')}
+            onClick={() => window.open(botSettings.channelUrl, '_blank')}
           >
             <Icon name="Radio" size={24} className="mr-3" />
             <div className="text-left">
@@ -547,7 +599,7 @@ const TelegramBot = () => {
           <Button
             variant="outline"
             className="w-full justify-start h-auto py-4"
-            onClick={() => window.open('https://t.me/yourchat', '_blank')}
+            onClick={() => window.open(botSettings.chatUrl, '_blank')}
           >
             <Icon name="MessagesSquare" size={24} className="mr-3" />
             <div className="text-left">
@@ -573,6 +625,341 @@ const TelegramBot = () => {
     </div>
   );
 
+  const AdminPanel = () => {
+    const [newChannel, setNewChannel] = useState('');
+    const [newChat, setNewChat] = useState('');
+    const [newBot, setNewBot] = useState('');
+
+    return (
+      <div className="space-y-4 p-4">
+        <Button variant="ghost" onClick={() => setShowAdminPanel(false)} className="mb-2">
+          <Icon name="ArrowLeft" size={20} className="mr-2" />
+          Назад
+        </Button>
+
+        <Card className="bg-gradient-to-br from-red-900 to-red-700 text-white border-0">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Icon name="Shield" size={24} />
+              🔧 Панель администратора
+            </CardTitle>
+            <CardDescription className="text-gray-200">
+              Управление настройками бота
+            </CardDescription>
+          </CardHeader>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>📊 Основные настройки</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Процент инвестиций (%)</label>
+              <Input
+                type="number"
+                value={botSettings.investmentPercent}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, investmentPercent: parseFloat(e.target.value) || 0 };
+                  saveBotSettings(newSettings);
+                }}
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Telegram администратора</label>
+              <Input
+                value={botSettings.adminTelegram}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, adminTelegram: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="@admin"
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ссылка на канал</label>
+              <Input
+                value={botSettings.channelUrl}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, channelUrl: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="https://t.me/yourchannel"
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ссылка на чат</label>
+              <Input
+                value={botSettings.chatUrl}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, chatUrl: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="https://t.me/yourchat"
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Бот для оплаты</label>
+              <Input
+                value={botSettings.paymentBot}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, paymentBot: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="@CryptoBot"
+                className="h-12"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Бот для вывода</label>
+              <Input
+                value={botSettings.withdrawBot}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, withdrawBot: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="@CryptoBot"
+                className="h-12"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>🔒 Обязательная подписка</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Включить проверку подписки</span>
+              <Button
+                variant={botSettings.requireSubscription ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  const newSettings = { ...botSettings, requireSubscription: !botSettings.requireSubscription };
+                  saveBotSettings(newSettings);
+                }}
+              >
+                {botSettings.requireSubscription ? 'Вкл' : 'Выкл'}
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Обязательные каналы</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="@channel или ссылка"
+                  value={newChannel}
+                  onChange={(e) => setNewChannel(e.target.value)}
+                />
+                <Button
+                  onClick={() => {
+                    if (newChannel) {
+                      const newSettings = {
+                        ...botSettings,
+                        requiredChannels: [...botSettings.requiredChannels, newChannel]
+                      };
+                      saveBotSettings(newSettings);
+                      setNewChannel('');
+                    }
+                  }}
+                >
+                  <Icon name="Plus" size={18} />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {botSettings.requiredChannels.map((channel, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-100 rounded">
+                    <span className="text-sm">{channel}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const newSettings = {
+                          ...botSettings,
+                          requiredChannels: botSettings.requiredChannels.filter((_, i) => i !== idx)
+                        };
+                        saveBotSettings(newSettings);
+                      }}
+                    >
+                      <Icon name="X" size={16} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Обязательные чаты</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="@chat или ссылка"
+                  value={newChat}
+                  onChange={(e) => setNewChat(e.target.value)}
+                />
+                <Button
+                  onClick={() => {
+                    if (newChat) {
+                      const newSettings = {
+                        ...botSettings,
+                        requiredChats: [...botSettings.requiredChats, newChat]
+                      };
+                      saveBotSettings(newSettings);
+                      setNewChat('');
+                    }
+                  }}
+                >
+                  <Icon name="Plus" size={18} />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {botSettings.requiredChats.map((chat, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-100 rounded">
+                    <span className="text-sm">{chat}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const newSettings = {
+                          ...botSettings,
+                          requiredChats: botSettings.requiredChats.filter((_, i) => i !== idx)
+                        };
+                        saveBotSettings(newSettings);
+                      }}
+                    >
+                      <Icon name="X" size={16} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Обязательные боты</label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="@bot"
+                  value={newBot}
+                  onChange={(e) => setNewBot(e.target.value)}
+                />
+                <Button
+                  onClick={() => {
+                    if (newBot) {
+                      const newSettings = {
+                        ...botSettings,
+                        requiredBots: [...botSettings.requiredBots, newBot]
+                      };
+                      saveBotSettings(newSettings);
+                      setNewBot('');
+                    }
+                  }}
+                >
+                  <Icon name="Plus" size={18} />
+                </Button>
+              </div>
+              <div className="space-y-1">
+                {botSettings.requiredBots.map((bot, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-100 rounded">
+                    <span className="text-sm">{bot}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const newSettings = {
+                          ...botSettings,
+                          requiredBots: botSettings.requiredBots.filter((_, i) => i !== idx)
+                        };
+                        saveBotSettings(newSettings);
+                      }}
+                    >
+                      <Icon name="X" size={16} />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>⚡ Управление ботом</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="p-4 bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg">
+              <p className="text-sm font-medium mb-2">Статус бота</p>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${botSettings.botStatus === 'running' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+                <span className="font-bold">{botSettings.botStatus === 'running' ? 'Запущен' : 'Остановлен'}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                className="h-14 bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => {
+                  const newSettings = { ...botSettings, botStatus: 'running' };
+                  saveBotSettings(newSettings);
+                  toast({ title: 'Бот запущен', description: 'Бот успешно запущен' });
+                }}
+              >
+                <Icon name="Play" size={20} className="mr-2" />
+                Запустить
+              </Button>
+              <Button
+                className="h-14 bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => {
+                  const newSettings = { ...botSettings, botStatus: 'stopped' };
+                  saveBotSettings(newSettings);
+                  toast({ title: 'Бот остановлен', description: 'Бот успешно остановлен' });
+                }}
+              >
+                <Icon name="Square" size={20} className="mr-2" />
+                Остановить
+              </Button>
+            </div>
+
+            <Button
+              className="w-full h-14 bg-yellow-600 hover:bg-yellow-700 text-white"
+              onClick={() => {
+                toast({ title: 'Перезапуск', description: 'Бот перезапускается...' });
+                setTimeout(() => {
+                  toast({ title: 'Готово', description: 'Бот успешно перезапущен' });
+                }, 2000);
+              }}
+            >
+              <Icon name="RotateCw" size={20} className="mr-2" />
+              Перезапустить бота
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full h-14"
+              onClick={() => {
+                toast({ title: 'Обновление', description: 'Проверка обновлений...' });
+              }}
+            >
+              <Icon name="Download" size={20} className="mr-2" />
+              Проверить обновления
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  if (showAdminPanel) return <AdminPanel />;
   if (showInvestment) return <InvestmentScreen />;
   if (showWallet) return <WalletScreen />;
   if (showPartners) return <PartnersScreen />;
