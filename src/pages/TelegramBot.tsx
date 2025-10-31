@@ -19,7 +19,12 @@ const TelegramBot = () => {
   const [showInvestment, setShowInvestment] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showPartners, setShowPartners] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [investmentAmount, setInvestmentAmount] = useState('');
+  const [calculatorAmount, setCalculatorAmount] = useState('');
+  const [calculatorDays, setCalculatorDays] = useState('30');
+  const [depositAmount, setDepositAmount] = useState('');
 
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp;
@@ -35,16 +40,30 @@ const TelegramBot = () => {
   }, []);
 
   const loadUserData = async (id: string) => {
-    setUserData({
-      balance: 1000.0,
-      withdrawBalance: 250.0,
-      partners: 3,
-      investments: [],
-      activeInvestment: {
-        amount: 500.0,
-        accumulated: 15.0,
-      },
-    });
+    const savedData = localStorage.getItem(`user_${id}`);
+    if (savedData) {
+      setUserData(JSON.parse(savedData));
+    } else {
+      const initialData = {
+        balance: 1000.0,
+        withdrawBalance: 250.0,
+        partners: 3,
+        investments: [],
+        activeInvestment: {
+          amount: 500.0,
+          accumulated: 15.0,
+        },
+      };
+      setUserData(initialData);
+      localStorage.setItem(`user_${id}`, JSON.stringify(initialData));
+    }
+  };
+  
+  const saveUserData = (data: any) => {
+    setUserData(data);
+    if (userId) {
+      localStorage.setItem(`user_${userId}`, JSON.stringify(data));
+    }
   };
 
   const handleInvest = async () => {
@@ -71,14 +90,15 @@ const TelegramBot = () => {
       title: 'Успешно!',
       description: 'Инвестиция активирована',
     });
-    setUserData(prev => ({
-      ...prev,
-      balance: prev.balance - amount,
+    const newData = {
+      ...userData,
+      balance: userData.balance - amount,
       activeInvestment: {
         amount: amount,
         accumulated: 0,
       }
-    }));
+    };
+    saveUserData(newData);
     setInvestmentAmount('');
     setShowInvestment(false);
   };
@@ -89,14 +109,15 @@ const TelegramBot = () => {
       title: 'Собрано!',
       description: `Вы получили ${profit.toFixed(2)} ₽`,
     });
-    setUserData(prev => ({
-      ...prev,
-      withdrawBalance: prev.withdrawBalance + profit,
+    const newData = {
+      ...userData,
+      withdrawBalance: userData.withdrawBalance + profit,
       activeInvestment: {
-        ...prev.activeInvestment,
+        ...userData.activeInvestment,
         accumulated: 0,
       }
-    }));
+    };
+    saveUserData(newData);
   };
 
   const MainScreen = () => (
@@ -168,7 +189,7 @@ const TelegramBot = () => {
           <Icon name="CreditCard" size={28} />
           <span className="text-sm">💳 Кошелёк</span>
         </Button>
-        <Button className="h-24 flex-col gap-2 bg-pink-600 hover:bg-pink-700 text-white">
+        <Button className="h-24 flex-col gap-2 bg-pink-600 hover:bg-pink-700 text-white" onClick={() => setShowCalculator(true)}>
           <Icon name="Calculator" size={28} />
           <span className="text-sm">🧮 Калькулятор</span>
         </Button>
@@ -176,7 +197,7 @@ const TelegramBot = () => {
           <Icon name="BookOpen" size={28} />
           <span className="text-sm">📚 Обучение</span>
         </Button>
-        <Button className="h-24 flex-col gap-2 bg-gray-700 hover:bg-gray-800 text-white">
+        <Button className="h-24 flex-col gap-2 bg-gray-700 hover:bg-gray-800 text-white" onClick={() => setShowSettings(true)}>
           <Icon name="Settings" size={28} />
           <span className="text-sm">⚙️ Настройки</span>
         </Button>
@@ -324,30 +345,53 @@ const TelegramBot = () => {
             <p className="text-sm opacity-90">Доступно для вывода</p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button className="h-16" variant="outline">
-              <Icon name="Download" size={20} className="mr-2" />
-              Пополнить
-            </Button>
-            <Button className="h-16" variant="default">
-              <Icon name="Upload" size={20} className="mr-2" />
-              Вывести
-            </Button>
-          </div>
-
           <Separator />
 
-          <div className="space-y-2">
-            <h4 className="font-medium">Способы пополнения:</h4>
+          <div className="space-y-3">
+            <h4 className="font-medium flex items-center gap-2">
+              <Icon name="Download" size={18} />
+              Пополнить баланс
+            </h4>
+            <Input
+              type="number"
+              placeholder="Введите сумму"
+              value={depositAmount}
+              onChange={(e) => setDepositAmount(e.target.value)}
+              className="h-12 text-lg"
+            />
             <div className="grid gap-2">
-              <Button variant="outline" className="justify-start h-auto py-3">
+              <Button 
+                variant="outline" 
+                className="justify-start h-auto py-3"
+                onClick={() => {
+                  const amount = parseFloat(depositAmount);
+                  if (amount > 0) {
+                    toast({
+                      title: 'Переход к оплате',
+                      description: `Сумма: ${amount} ₽ (Банковская карта)`,
+                    });
+                  }
+                }}
+              >
                 <Icon name="CreditCard" size={20} className="mr-3" />
                 <div className="text-left">
                   <p className="font-medium">Банковская карта</p>
                   <p className="text-xs text-muted-foreground">Visa, Mastercard, МИР</p>
                 </div>
               </Button>
-              <Button variant="outline" className="justify-start h-auto py-3">
+              <Button 
+                variant="outline" 
+                className="justify-start h-auto py-3"
+                onClick={() => {
+                  const amount = parseFloat(depositAmount);
+                  if (amount > 0) {
+                    toast({
+                      title: 'Переход к оплате',
+                      description: `Сумма: ${amount} ₽ (СБП)`,
+                    });
+                  }
+                }}
+              >
                 <Icon name="Smartphone" size={20} className="mr-3" />
                 <div className="text-left">
                   <p className="font-medium">СБП</p>
@@ -355,6 +399,174 @@ const TelegramBot = () => {
                 </div>
               </Button>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <h4 className="font-medium flex items-center gap-2">
+              <Icon name="Upload" size={18} />
+              Вывести средства
+            </h4>
+            <Button 
+              className="w-full h-14" 
+              variant="default"
+              onClick={() => {
+                toast({
+                  title: 'Заявка на вывод',
+                  description: `Доступно: ${userData.withdrawBalance.toFixed(2)} ₽`,
+                });
+              }}
+            >
+              <Icon name="Upload" size={20} className="mr-2" />
+              Вывести {userData.withdrawBalance.toFixed(2)} ₽
+            </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Средства будут переведены в течение 24 часов
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const CalculatorScreen = () => {
+    const amount = parseFloat(calculatorAmount) || 0;
+    const days = parseInt(calculatorDays) || 1;
+    const dailyProfit = amount * 0.01;
+    const totalProfit = dailyProfit * days;
+    const totalAmount = amount + totalProfit;
+
+    return (
+      <div className="space-y-4 p-4">
+        <Button variant="ghost" onClick={() => setShowCalculator(false)} className="mb-2">
+          <Icon name="ArrowLeft" size={20} className="mr-2" />
+          Назад
+        </Button>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Icon name="Calculator" size={24} />
+              🧮 Калькулятор доходности
+            </CardTitle>
+            <CardDescription>
+              Рассчитайте свою прибыль от инвестиций
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Сумма инвестиции (₽)</label>
+              <Input
+                type="number"
+                placeholder="Введите сумму"
+                value={calculatorAmount}
+                onChange={(e) => setCalculatorAmount(e.target.value)}
+                className="h-12 text-lg"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Количество дней</label>
+              <Input
+                type="number"
+                placeholder="Введите дни"
+                value={calculatorDays}
+                onChange={(e) => setCalculatorDays(e.target.value)}
+                className="h-12 text-lg"
+              />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3 p-4 bg-gradient-to-br from-green-100 to-emerald-100 rounded-lg">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">Ежедневный доход (1%):</span>
+                <span className="font-bold text-green-700">{dailyProfit.toFixed(2)} ₽</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-700">Прибыль за {days} дней:</span>
+                <span className="font-bold text-green-700">{totalProfit.toFixed(2)} ₽</span>
+              </div>
+              <Separator className="bg-green-300" />
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-gray-800">Итоговая сумма:</span>
+                <span className="text-2xl font-bold text-green-800">{totalAmount.toFixed(2)} ₽</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+              <Icon name="Info" size={16} className="inline mr-2" />
+              Расчёт производится по ставке 1% в сутки
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
+
+  const SettingsScreen = () => (
+    <div className="space-y-4 p-4">
+      <Button variant="ghost" onClick={() => setShowSettings(false)} className="mb-2">
+        <Icon name="ArrowLeft" size={20} className="mr-2" />
+        Назад
+      </Button>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Icon name="Settings" size={24} />
+            ⚙️ Настройки
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            className="w-full justify-start h-auto py-4"
+            onClick={() => window.open('https://t.me/admin', '_blank')}
+          >
+            <Icon name="UserCog" size={24} className="mr-3" />
+            <div className="text-left">
+              <p className="font-medium">👨‍💻 Администратор</p>
+              <p className="text-xs text-muted-foreground">Написать администратору</p>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start h-auto py-4"
+            onClick={() => window.open('https://t.me/yourchannel', '_blank')}
+          >
+            <Icon name="Radio" size={24} className="mr-3" />
+            <div className="text-left">
+              <p className="font-medium">📢 Наш канал</p>
+              <p className="text-xs text-muted-foreground">Подписывайтесь на новости</p>
+            </div>
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full justify-start h-auto py-4"
+            onClick={() => window.open('https://t.me/yourchat', '_blank')}
+          >
+            <Icon name="MessagesSquare" size={24} className="mr-3" />
+            <div className="text-left">
+              <p className="font-medium">💬 Наш чат</p>
+              <p className="text-xs text-muted-foreground">Общайтесь с командой</p>
+            </div>
+          </Button>
+
+          <Separator />
+
+          <div className="p-4 bg-gray-100 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Icon name="Info" size={18} />
+              <p className="text-sm font-medium">О приложении</p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Версия: 1.0.0<br />
+              Телеграм бот для инвестиций
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -364,6 +576,8 @@ const TelegramBot = () => {
   if (showInvestment) return <InvestmentScreen />;
   if (showWallet) return <WalletScreen />;
   if (showPartners) return <PartnersScreen />;
+  if (showCalculator) return <CalculatorScreen />;
+  if (showSettings) return <SettingsScreen />;
 
   return <MainScreen />;
 };
