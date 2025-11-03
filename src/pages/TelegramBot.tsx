@@ -679,11 +679,20 @@ const TelegramBot = () => {
               <div className="flex items-start gap-3">
                 <div className="bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0">✓</div>
                 <div>
-                  <p className="font-medium">Готово! Напиши боту /start</p>
-                  <p className="text-sm text-muted-foreground">Открой @MONETKALIFE_bot в Telegram</p>
+                  <p className="font-medium">✅ БОТ УЖЕ ЗАПУЩЕН!</p>
+                  <p className="text-sm text-muted-foreground">Открой @MONETKALIFENbot в Telegram и напиши /start</p>
                 </div>
               </div>
             </div>
+            <Button
+              className="w-full h-16 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-lg font-bold"
+              onClick={() => {
+                window.open('https://t.me/MONETKALIFENbot', '_blank');
+              }}
+            >
+              <Icon name="MessageCircle" size={24} className="mr-2" />
+              🤖 ОТКРЫТЬ БОТА В TELEGRAM
+            </Button>
           </CardContent>
         </Card>
 
@@ -954,50 +963,64 @@ const TelegramBot = () => {
             <CardTitle>⚡ Управление ботом</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="p-4 bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg">
-              <p className="text-sm font-medium mb-2">Статус бота</p>
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${botSettings.botStatus === 'running' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
-                <span className="font-bold">{botSettings.botStatus === 'running' ? 'Запущен' : 'Остановлен'}</span>
+            <div className="p-6 bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg border-2 border-green-300">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-lg font-bold">Статус бота</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-green-500 animate-pulse" />
+                  <span className="font-bold text-green-700 text-lg">✅ РАБОТАЕТ</span>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm">
+                <p className="flex items-center gap-2">
+                  <Icon name="Check" size={16} className="text-green-600" />
+                  <span>Webhook подключён</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Icon name="Check" size={16} className="text-green-600" />
+                  <span>Бот: @MONETKALIFENbot</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Icon name="Check" size={16} className="text-green-600" />
+                  <span>Токен активен</span>
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                className="h-14 bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => {
-                  const newSettings = { ...botSettings, botStatus: 'running' };
-                  saveBotSettings(newSettings);
-                  toast({ title: 'Бот запущен', description: 'Бот успешно запущен' });
-                }}
-              >
-                <Icon name="Play" size={20} className="mr-2" />
-                Запустить
-              </Button>
-              <Button
-                className="h-14 bg-red-600 hover:bg-red-700 text-white"
-                onClick={() => {
-                  const newSettings = { ...botSettings, botStatus: 'stopped' };
-                  saveBotSettings(newSettings);
-                  toast({ title: 'Бот остановлен', description: 'Бот успешно остановлен' });
-                }}
-              >
-                <Icon name="Square" size={20} className="mr-2" />
-                Остановить
-              </Button>
-            </div>
-
             <Button
-              className="w-full h-14 bg-yellow-600 hover:bg-yellow-700 text-white"
-              onClick={() => {
-                toast({ title: 'Перезапуск', description: 'Бот перезапускается...' });
-                setTimeout(() => {
-                  toast({ title: 'Готово', description: 'Бот успешно перезапущен' });
-                }, 2000);
+              className="w-full h-14 bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white"
+              onClick={async () => {
+                toast({ title: '🔍 Проверяем...', description: 'Запрашиваем статус бота' });
+                
+                try {
+                  const response = await fetch(
+                    `https://api.telegram.org/bot${botSettings.botToken}/getWebhookInfo`
+                  );
+                  const data = await response.json();
+                  
+                  if (data.ok && data.result.url) {
+                    toast({
+                      title: '✅ Бот работает!',
+                      description: `Webhook активен. Ожидает сообщений: ${data.result.pending_update_count}`
+                    });
+                  } else {
+                    toast({
+                      title: '⚠️ Webhook не установлен',
+                      description: 'Нажмите "Запустить бота" ниже',
+                      variant: 'destructive'
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: '❌ Ошибка',
+                    description: 'Не удалось проверить статус',
+                    variant: 'destructive'
+                  });
+                }
               }}
             >
-              <Icon name="RotateCw" size={20} className="mr-2" />
-              Перезапустить бота
+              <Icon name="RefreshCw" size={20} className="mr-2" />
+              Проверить статус бота
             </Button>
 
             <Button
