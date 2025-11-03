@@ -20,6 +20,31 @@ def get_db_connection():
     database_url = os.environ.get('DATABASE_URL')
     return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
 
+def send_telegram_message(bot_token: str, chat_id: int, text: str, reply_markup=None):
+    import urllib.request
+    import urllib.parse
+    
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    data = {
+        'chat_id': chat_id,
+        'text': text,
+        'parse_mode': 'HTML'
+    }
+    if reply_markup:
+        data['reply_markup'] = json.dumps(reply_markup)
+    
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(data).encode('utf-8'),
+        headers={'Content-Type': 'application/json'}
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     method: str = event.get('httpMethod', 'GET')
     
@@ -37,6 +62,62 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
     
     path = event.get('queryStringParameters', {}).get('path', '')
+    
+    if path == 'telegram_webhook':
+        body_data = json.loads(event.get('body', '{}'))
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8296427829:AAFS25SM96ZtRS2Z36XS1-jeY2uTDo0fj5M')
+        
+        if 'message' in body_data:
+            message = body_data['message']
+            chat_id = message['chat']['id']
+            text = message.get('text', '')
+            user_first_name = message['from'].get('first_name', 'друг')
+            
+            if text == '/start':
+                web_app_url = 'https://monetkalife.poehali.dev/bot'
+                
+                welcome_text = f'''👋 <b>Привет, {user_first_name}!</b>
+
+💰 Добро пожаловать в инвестиционного бота!
+
+📊 Здесь вы можете:
+• Инвестировать с доходностью 3% в день
+• Выводить средства в любой момент
+• Приглашать партнёров и получать бонусы
+
+🚀 Нажми кнопку ниже, чтобы начать!'''
+                
+                keyboard = {
+                    'inline_keyboard': [[
+                        {'text': '🚀 Открыть приложение', 'web_app': {'url': web_app_url}}
+                    ], [
+                        {'text': '💬 Поддержка', 'url': 'https://t.me/admin'}
+                    ]]
+                }
+                
+                send_telegram_message(bot_token, chat_id, welcome_text, keyboard)
+            
+            elif text == '/help':
+                help_text = '''📚 <b>Помощь по боту</b>
+
+/start - Главное меню
+/help - Эта справка
+/app - Открыть приложение
+
+💡 Нажмите "Открыть приложение" для доступа ко всем функциям!'''
+                
+                send_telegram_message(bot_token, chat_id, help_text)
+            
+            else:
+                reply_text = '👋 Используй /start для открытия приложения!'
+                send_telegram_message(bot_token, chat_id, reply_text)
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json'},
+            'body': json.dumps({'ok': True}),
+            'isBase64Encoded': False
+        }
     
     try:
         conn = get_db_connection()

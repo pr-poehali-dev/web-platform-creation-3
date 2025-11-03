@@ -40,6 +40,8 @@ const TelegramBot = () => {
     paymentBot: '@CryptoBot',
     withdrawBot: '@CryptoBot',
     botToken: '8296427829:AAFS25SM96ZtRS2Z36XS1-jeY2uTDo0fj5M',
+    welcomeMessage: '',
+    webAppUrl: 'https://monetkalife.poehali.dev/bot',
   });
 
   useEffect(() => {
@@ -966,12 +968,117 @@ const TelegramBot = () => {
             <Button
               variant="outline"
               className="w-full h-14"
-              onClick={() => {
-                toast({ title: 'Обновление', description: 'Проверка обновлений...' });
+              onClick={async () => {
+                const webhookUrl = `https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf?path=telegram_webhook`;
+                
+                try {
+                  const response = await fetch(
+                    `https://api.telegram.org/bot${botSettings.botToken}/setWebhook`,
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: webhookUrl })
+                    }
+                  );
+                  
+                  const data = await response.json();
+                  
+                  if (data.ok) {
+                    toast({
+                      title: '✅ Webhook установлен!',
+                      description: 'Бот готов принимать сообщения'
+                    });
+                  } else {
+                    toast({
+                      title: '❌ Ошибка',
+                      description: data.description || 'Не удалось установить webhook',
+                      variant: 'destructive'
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: '❌ Ошибка',
+                    description: 'Проверьте токен бота',
+                    variant: 'destructive'
+                  });
+                }
               }}
             >
-              <Icon name="Download" size={20} className="mr-2" />
-              Проверить обновления
+              <Icon name="Link" size={20} className="mr-2" />
+              Подключить webhook
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>💬 Настройка сообщений</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Приветственное сообщение</label>
+              <textarea
+                className="w-full h-32 p-3 border rounded-md resize-none text-sm"
+                value={botSettings.welcomeMessage || ''}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, welcomeMessage: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="Привет! 👋 Добро пожаловать в наш бот..."
+              />
+              <p className="text-xs text-muted-foreground">
+                Используй HTML теги: &lt;b&gt;жирный&lt;/b&gt;, &lt;i&gt;курсив&lt;/i&gt;
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">URL Web App</label>
+              <Input
+                value={botSettings.webAppUrl || 'https://monetkalife.poehali.dev/bot'}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, webAppUrl: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="https://yourdomain.com/bot"
+                className="h-12"
+              />
+            </div>
+
+            <Button
+              className="w-full h-12"
+              onClick={async () => {
+                const testMessage = botSettings.welcomeMessage || '👋 Привет! Это тестовое сообщение от бота.';
+                
+                toast({
+                  title: 'Отправка...',
+                  description: 'Отправляем тестовое сообщение'
+                });
+                
+                try {
+                  const response = await fetch(
+                    `https://api.telegram.org/bot${botSettings.botToken}/getMe`
+                  );
+                  const data = await response.json();
+                  
+                  if (data.ok) {
+                    toast({
+                      title: '✅ Бот работает!',
+                      description: `Подключён как @${data.result.username}`
+                    });
+                  }
+                } catch (error) {
+                  toast({
+                    title: '❌ Ошибка',
+                    description: 'Проверьте токен',
+                    variant: 'destructive'
+                  });
+                }
+              }}
+            >
+              <Icon name="Send" size={18} className="mr-2" />
+              Проверить бота
             </Button>
           </CardContent>
         </Card>
