@@ -39,6 +39,7 @@ const TelegramBot = () => {
     botStatus: 'running',
     paymentBot: '@CryptoBot',
     withdrawBot: '@CryptoBot',
+    botToken: '8296427829:AAFS25SM96ZtRS2Z36XS1-jeY2uTDo0fj5M',
   });
 
   useEffect(() => {
@@ -730,6 +731,25 @@ const TelegramBot = () => {
                 placeholder="@CryptoBot"
                 className="h-12"
               />
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">🤖 Токен Telegram бота</label>
+              <Input
+                value={botSettings.botToken}
+                onChange={(e) => {
+                  const newSettings = { ...botSettings, botToken: e.target.value };
+                  saveBotSettings(newSettings);
+                }}
+                placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+                className="h-12 font-mono text-xs"
+                type="password"
+              />
+              <p className="text-xs text-muted-foreground">
+                Получи токен у @BotFather в Telegram
+              </p>
             </div>
           </CardContent>
         </Card>
