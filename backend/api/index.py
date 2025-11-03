@@ -63,7 +63,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     path = event.get('queryStringParameters', {}).get('path', '')
     
-    if path == 'telegram_webhook':
+    if path == 'telegram_webhook' and method == 'POST':
         body_data = json.loads(event.get('body', '{}'))
         bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8296427829:AAFS25SM96ZtRS2Z36XS1-jeY2uTDo0fj5M')
         
@@ -114,10 +114,53 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         return {
             'statusCode': 200,
-            'headers': {'Content-Type': 'application/json'},
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
             'body': json.dumps({'ok': True}),
             'isBase64Encoded': False
         }
+    
+    if path == 'setup_webhook' and method == 'POST':
+        body_data = json.loads(event.get('body', '{}'))
+        bot_token = body_data.get('bot_token', os.environ.get('TELEGRAM_BOT_TOKEN', ''))
+        webhook_url = 'https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf?path=telegram_webhook'
+        
+        import urllib.request
+        import urllib.parse
+        
+        url = f'https://api.telegram.org/bot{bot_token}/setWebhook'
+        data = json.dumps({'url': webhook_url}).encode('utf-8')
+        
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return {
+                    'statusCode': 200,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    },
+                    'body': json.dumps(result),
+                    'isBase64Encoded': False
+                }
+        except Exception as e:
+            return {
+                'statusCode': 500,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({'ok': False, 'error': str(e)}),
+                'isBase64Encoded': False
+            }
     
     try:
         conn = get_db_connection()

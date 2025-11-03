@@ -652,6 +652,41 @@ const TelegramBot = () => {
           </CardHeader>
         </Card>
 
+        <Card className="bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200">
+          <CardContent className="pt-6">
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="bg-yellow-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0">1</div>
+                <div>
+                  <p className="font-medium">Токен уже установлен</p>
+                  <p className="text-sm text-muted-foreground">Ваш токен: 8296...fj5M</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="bg-yellow-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0">2</div>
+                <div>
+                  <p className="font-medium">Прокрути вниз до "Управление ботом"</p>
+                  <p className="text-sm text-muted-foreground">Найди синюю кнопку "🚀 ЗАПУСТИТЬ БОТА"</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="bg-yellow-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0">3</div>
+                <div>
+                  <p className="font-medium">Нажми кнопку один раз</p>
+                  <p className="text-sm text-muted-foreground">После этого бот заработает!</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold flex-shrink-0">✓</div>
+                <div>
+                  <p className="font-medium">Готово! Напиши боту /start</p>
+                  <p className="text-sm text-muted-foreground">Открой @MONETKALIFE_bot в Telegram</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>📊 Основные настройки</CardTitle>
@@ -967,17 +1002,20 @@ const TelegramBot = () => {
 
             <Button
               variant="outline"
-              className="w-full h-14"
+              className="w-full h-14 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700"
               onClick={async () => {
-                const webhookUrl = `https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf?path=telegram_webhook`;
+                toast({
+                  title: '⏳ Подключаем...',
+                  description: 'Устанавливаем webhook для бота'
+                });
                 
                 try {
                   const response = await fetch(
-                    `https://api.telegram.org/bot${botSettings.botToken}/setWebhook`,
+                    'https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf?path=setup_webhook',
                     {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ url: webhookUrl })
+                      body: JSON.stringify({ bot_token: botSettings.botToken })
                     }
                   );
                   
@@ -985,27 +1023,27 @@ const TelegramBot = () => {
                   
                   if (data.ok) {
                     toast({
-                      title: '✅ Webhook установлен!',
-                      description: 'Бот готов принимать сообщения'
+                      title: '✅ Бот запущен!',
+                      description: 'Webhook установлен. Напиши боту /start в Telegram'
                     });
                   } else {
                     toast({
                       title: '❌ Ошибка',
-                      description: data.description || 'Не удалось установить webhook',
+                      description: data.description || 'Проверьте токен бота',
                       variant: 'destructive'
                     });
                   }
                 } catch (error) {
                   toast({
-                    title: '❌ Ошибка',
-                    description: 'Проверьте токен бота',
+                    title: '❌ Ошибка подключения',
+                    description: 'Не удалось установить webhook',
                     variant: 'destructive'
                   });
                 }
               }}
             >
-              <Icon name="Link" size={20} className="mr-2" />
-              Подключить webhook
+              <Icon name="Zap" size={20} className="mr-2" />
+              🚀 ЗАПУСТИТЬ БОТА
             </Button>
           </CardContent>
         </Card>
