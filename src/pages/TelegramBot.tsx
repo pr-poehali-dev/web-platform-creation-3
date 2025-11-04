@@ -684,15 +684,26 @@ const TelegramBot = () => {
                 </div>
               </div>
             </div>
-            <Button
-              className="w-full h-16 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-lg font-bold"
-              onClick={() => {
-                window.open('https://t.me/MONETKALIFENbot', '_blank');
-              }}
-            >
-              <Icon name="MessageCircle" size={24} className="mr-2" />
-              🤖 ОТКРЫТЬ БОТА В TELEGRAM
-            </Button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Button
+                className="h-16 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white text-lg font-bold"
+                onClick={() => {
+                  window.open('https://t.me/MONETKALIFENbot', '_blank');
+                }}
+              >
+                <Icon name="MessageCircle" size={24} className="mr-2" />
+                🤖 ОТКРЫТЬ БОТА
+              </Button>
+              <Button
+                className="h-16 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-lg font-bold"
+                onClick={() => {
+                  window.open('/rocket', '_blank');
+                }}
+              >
+                <Icon name="Rocket" size={24} className="mr-2" />
+                🚀 ИГРАТЬ В РАКЕТУ
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -955,6 +966,56 @@ const TelegramBot = () => {
                 ))}
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-100 to-pink-100 border-purple-300">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Icon name="Rocket" size={28} />
+              🚀 Игра "РАКЕТА"
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-gray-700">
+              Азартная игра, где игроки ставят монеты на взлёт ракеты и забирают выигрыш до того, как она взорвётся!
+            </p>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-white/70 rounded-lg border-2 border-purple-200">
+                <p className="text-3xl font-bold text-green-600">30%</p>
+                <p className="text-sm text-gray-600">Шанс выигрыша</p>
+              </div>
+              <div className="p-4 bg-white/70 rounded-lg border-2 border-purple-200">
+                <p className="text-3xl font-bold text-red-600">70%</p>
+                <p className="text-sm text-gray-600">Шанс проигрыша</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <p className="flex items-center gap-2">
+                <Icon name="Check" size={16} className="text-purple-600" />
+                <span>Коэффициент до x15.00</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Icon name="Check" size={16} className="text-purple-600" />
+                <span>Реальные ставки и выигрыши</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Icon name="Check" size={16} className="text-purple-600" />
+                <span>История всех игр</span>
+              </p>
+            </div>
+
+            <Button
+              className="w-full h-14 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 text-white text-lg font-bold"
+              onClick={() => {
+                window.open('/rocket', '_blank');
+              }}
+            >
+              <Icon name="Rocket" size={24} className="mr-2" />
+              🎮 ЗАПУСТИТЬ ИГРУ
+            </Button>
           </CardContent>
         </Card>
 

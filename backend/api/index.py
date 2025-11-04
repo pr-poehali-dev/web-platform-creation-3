@@ -16,6 +16,18 @@ import string
 def generate_referral_code(length: int = 10) -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
+def generate_crash_point() -> float:
+    rand = random.random() * 100
+    
+    if rand < 70:
+        return round(1.00 + random.random() * 0.50, 2)
+    elif rand < 90:
+        return round(1.50 + random.random() * 1.00, 2)
+    elif rand < 97:
+        return round(2.50 + random.random() * 2.50, 2)
+    else:
+        return round(5.00 + random.random() * 10.00, 2)
+
 def get_db_connection():
     database_url = os.environ.get('DATABASE_URL')
     return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
@@ -74,24 +86,26 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             user_first_name = message['from'].get('first_name', 'друг')
             
             if text == '/start':
-                web_app_url = 'https://monetkalife.poehali.dev/bot'
+                rocket_game_url = 'https://monetkalife.poehali.dev/rocket'
                 
                 welcome_text = f'''👋 <b>Привет, {user_first_name}!</b>
 
-💰 Добро пожаловать в инвестиционного бота!
+🚀 Добро пожаловать в игру РАКЕТА!
 
-📊 Здесь вы можете:
-• Инвестировать с доходностью 3% в день
-• Выводить средства в любой момент
-• Приглашать партнёров и получать бонусы
+💰 Здесь вы можете:
+• Делать ставки на взлёт ракеты
+• Забирать выигрыш в любой момент
+• Рисковать и выигрывать до x15.00!
 
-🚀 Нажми кнопку ниже, чтобы начать!'''
+📊 Шансы: 30% выигрыш, 70% проигрыш
+
+🎮 Нажми кнопку ниже, чтобы начать играть!'''
                 
                 keyboard = {
                     'inline_keyboard': [[
-                        {'text': '🚀 Открыть приложение', 'web_app': {'url': web_app_url}}
+                        {'text': '🚀 Играть в РАКЕТУ', 'web_app': {'url': rocket_game_url}}
                     ], [
-                        {'text': '💬 Поддержка', 'url': 'https://t.me/admin'}
+                        {'text': '📊 Правила игры', 'callback_data': 'rules'}
                     ]]
                 }
                 
@@ -111,6 +125,37 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             else:
                 reply_text = '👋 Используй /start для открытия приложения!'
                 send_telegram_message(bot_token, chat_id, reply_text)
+        
+        elif 'callback_query' in body_data:
+            callback = body_data['callback_query']
+            chat_id = callback['message']['chat']['id']
+            callback_data = callback['data']
+            
+            if callback_data == 'rules':
+                rules_text = '''📖 <b>Правила игры "РАКЕТА"</b>
+
+🚀 <b>Как играть:</b>
+1. Сделайте ставку (от 1 монеты)
+2. Нажмите "Запуск" - ракета взлетает!
+3. Коэффициент растёт: 1.00x → 1.50x → 2.00x → ...
+4. Нажмите "Забрать" до взрыва ракеты!
+
+💰 <b>Выигрыш:</b>
+Ваша ставка × коэффициент = выигрыш
+
+💥 <b>Проигрыш:</b>
+Если ракета взорвётся - ставка сгорает
+
+📊 <b>Шансы:</b>
+• 70% - ракета взрывается до 1.50x
+• 20% - ракета достигает 1.50x-2.50x
+• 7% - ракета достигает 2.50x-5.00x
+• 3% - ракета достигает 5.00x-15.00x
+
+🎯 <b>Стратегия:</b>
+Забирайте на малых коэффициентах (1.20x-1.50x) для частых выигрышей!'''
+                
+                send_telegram_message(bot_token, chat_id, rules_text)
         
         return {
             'statusCode': 200,
@@ -266,6 +311,198 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
                 'body': json.dumps(dict(transaction), default=str),
+                'isBase64Encoded': False
+            }
+        
+        elif method == 'POST' and path == 'rocket_start':
+            body_data = json.loads(event.get('body', '{}'))
+            telegram_id = body_data.get('telegram_id')
+            bet_amount = float(body_data.get('bet_amount', 0))
+            
+            if not telegram_id or bet_amount <= 0:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Invalid parameters'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute('SELECT id, balance FROM users WHERE telegram_id = %s', (telegram_id,))
+            user = cur.fetchone()
+            
+            if not user:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 404,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'User not found'}),
+                    'isBase64Encoded': False
+                }
+            
+            if float(user['balance']) < bet_amount:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Insufficient balance'}),
+                    'isBase64Encoded': False
+                }
+            
+            crash_point = generate_crash_point()
+            
+            cur.execute('UPDATE users SET balance = balance - %s WHERE id = %s', (bet_amount, user['id']))
+            conn.commit()
+            
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'crash_point': crash_point, 'user_id': user['id']}),
+                'isBase64Encoded': False
+            }
+        
+        elif method == 'POST' and path == 'rocket_cashout':
+            body_data = json.loads(event.get('body', '{}'))
+            user_id = body_data.get('user_id')
+            bet_amount = float(body_data.get('bet_amount', 0))
+            multiplier = float(body_data.get('multiplier', 0))
+            crash_point = float(body_data.get('crash_point', 0))
+            
+            if not user_id or bet_amount <= 0 or multiplier <= 0:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Invalid parameters'}),
+                    'isBase64Encoded': False
+                }
+            
+            profit = round(bet_amount * multiplier, 2)
+            net_profit = round(profit - bet_amount, 2)
+            
+            cur.execute('UPDATE users SET balance = balance + %s WHERE id = %s', (profit, user_id))
+            
+            cur.execute(
+                '''INSERT INTO rocket_games (user_id, bet_amount, multiplier, crash_point, profit, won)
+                   VALUES (%s, %s, %s, %s, %s, %s)''',
+                (user_id, bet_amount, multiplier, crash_point, net_profit, True)
+            )
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'profit': profit, 'net_profit': net_profit}),
+                'isBase64Encoded': False
+            }
+        
+        elif method == 'POST' and path == 'rocket_lost':
+            body_data = json.loads(event.get('body', '{}'))
+            user_id = body_data.get('user_id')
+            bet_amount = float(body_data.get('bet_amount', 0))
+            crash_point = float(body_data.get('crash_point', 0))
+            
+            if not user_id or bet_amount <= 0:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Invalid parameters'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute(
+                '''INSERT INTO rocket_games (user_id, bet_amount, multiplier, crash_point, profit, won)
+                   VALUES (%s, %s, %s, %s, %s, %s)''',
+                (user_id, bet_amount, crash_point, crash_point, -bet_amount, False)
+            )
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True}),
+                'isBase64Encoded': False
+            }
+        
+        elif method == 'GET' and path == 'rocket_history':
+            telegram_id = event.get('queryStringParameters', {}).get('telegram_id')
+            
+            if not telegram_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'telegram_id required'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute('SELECT id FROM users WHERE telegram_id = %s', (telegram_id,))
+            user = cur.fetchone()
+            
+            if not user:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 404,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'User not found'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute(
+                '''SELECT * FROM rocket_games WHERE user_id = %s 
+                   ORDER BY created_at DESC LIMIT 20''',
+                (user['id'],)
+            )
+            games = cur.fetchall()
+            
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps([dict(g) for g in games], default=str),
+                'isBase64Encoded': False
+            }
+        
+        elif method == 'GET' and path == 'rocket_balance':
+            telegram_id = event.get('queryStringParameters', {}).get('telegram_id')
+            
+            if not telegram_id:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'telegram_id required'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute('SELECT balance FROM users WHERE telegram_id = %s', (telegram_id,))
+            user = cur.fetchone()
+            
+            cur.close()
+            conn.close()
+            
+            if not user:
+                return {
+                    'statusCode': 404,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'User not found'}),
+                    'isBase64Encoded': False
+                }
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'balance': float(user['balance'])}),
                 'isBase64Encoded': False
             }
         
