@@ -228,8 +228,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             if not user:
                 referral_code = generate_referral_code()
                 cur.execute(
-                    'INSERT INTO users (telegram_id, referral_code) VALUES (%s, %s) RETURNING *',
-                    (telegram_id, referral_code)
+                    'INSERT INTO users (telegram_id, referral_code, balance) VALUES (%s, %s, %s) RETURNING *',
+                    (telegram_id, referral_code, 1000.00)
                 )
                 user = cur.fetchone()
                 conn.commit()
@@ -488,16 +488,17 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             cur.execute('SELECT balance FROM users WHERE telegram_id = %s', (telegram_id,))
             user = cur.fetchone()
             
+            if not user:
+                referral_code = generate_referral_code()
+                cur.execute(
+                    'INSERT INTO users (telegram_id, referral_code, balance) VALUES (%s, %s, %s) RETURNING balance',
+                    (telegram_id, referral_code, 1000.00)
+                )
+                user = cur.fetchone()
+                conn.commit()
+            
             cur.close()
             conn.close()
-            
-            if not user:
-                return {
-                    'statusCode': 404,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'User not found'}),
-                    'isBase64Encoded': False
-                }
             
             return {
                 'statusCode': 200,
