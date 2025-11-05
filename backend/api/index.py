@@ -1,5 +1,5 @@
 '''
-Business: API для работы с пользователями, балансом и транзакциями BonusHub
+Business: API для инвестиционного бота с начислением 1% в день
 Args: event - dict с httpMethod, body, queryStringParameters
       context - объект с атрибутами request_id, function_name
 Returns: HTTP response dict
@@ -12,21 +12,10 @@ from psycopg2.extras import RealDictCursor
 from typing import Dict, Any
 import random
 import string
+from datetime import datetime, timedelta
 
 def generate_referral_code(length: int = 10) -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
-
-def generate_crash_point() -> float:
-    rand = random.random() * 100
-    
-    if rand < 70:
-        return round(1.00 + random.random() * 0.50, 2)
-    elif rand < 90:
-        return round(1.50 + random.random() * 1.00, 2)
-    elif rand < 97:
-        return round(2.50 + random.random() * 2.50, 2)
-    else:
-        return round(5.00 + random.random() * 10.00, 2)
 
 def get_db_connection():
     database_url = os.environ.get('DATABASE_URL')
@@ -57,6 +46,38 @@ def send_telegram_message(bot_token: str, chat_id: int, text: str, reply_markup=
     except Exception as e:
         return {'ok': False, 'error': str(e)}
 
+def calculate_accruals(user_id: int, conn):
+    cur = conn.cursor()
+    
+    cur.execute('''
+        SELECT id, amount, last_collect, accumulated 
+        FROM investments 
+        WHERE user_id = %s AND is_active = true
+    ''', (user_id,))
+    
+    investments = cur.fetchall()
+    total_accrued = 0
+    
+    for inv in investments:
+        time_diff = datetime.now() - inv['last_collect']
+        days_passed = time_diff.total_seconds() / 86400
+        
+        daily_profit = float(inv['amount']) * 0.01
+        accrued = daily_profit * days_passed
+        new_accumulated = float(inv['accumulated']) + accrued
+        
+        cur.execute('''
+            UPDATE investments 
+            SET accumulated = %s, last_collect = CURRENT_TIMESTAMP 
+            WHERE id = %s
+        ''', (new_accumulated, inv['id']))
+        
+        total_accrued += accrued
+    
+    conn.commit()
+    cur.close()
+    return total_accrued
+
 def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     method: str = event.get('httpMethod', 'GET')
     
@@ -77,85 +98,86 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     if path == 'telegram_webhook' and method == 'POST':
         body_data = json.loads(event.get('body', '{}'))
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8296427829:AAFS25SM96ZtRS2Z36XS1-jeY2uTDo0fj5M')
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
         
         if 'message' in body_data:
             message = body_data['message']
             chat_id = message['chat']['id']
             text = message.get('text', '')
             user_first_name = message['from'].get('first_name', 'друг')
+            telegram_id = message['from']['id']
+            
+            conn = get_db_connection()
+            cur = conn.cursor()
+            
+            cur.execute('SELECT * FROM telegram_users WHERE user_id = %s', (telegram_id,))
+            user = cur.fetchone()
+            
+            if not user:
+                referral_code = generate_referral_code()
+                cur.execute('''
+                    INSERT INTO telegram_users (user_id, username, balance, withdraw_balance) 
+                    VALUES (%s, %s, 0, 0) RETURNING *
+                ''', (telegram_id, message['from'].get('username', '')))
+                user = cur.fetchone()
+                conn.commit()
             
             if text == '/start':
-                rocket_game_url = 'https://monetkalife.poehali.dev/rocket'
+                app_url = 'https://monetkalife.poehali.dev/'
                 
                 welcome_text = f'''👋 <b>Привет, {user_first_name}!</b>
 
-🚀 Добро пожаловать в игру РАКЕТА!
+💰 <b>MLWizard Investment</b> - Ваш путь к пассивному доходу!
 
-💰 Здесь вы можете:
-• Делать ставки на взлёт ракеты
-• Забирать выигрыш в любой момент
-• Рисковать и выигрывать до x15.00!
+📈 Получайте <b>1% в день</b> от суммы инвестиций
+🔄 Ежедневное начисление прибыли
+💎 Вывод средств в любое время
+👥 Партнёрская программа
 
-📊 Шансы: 30% выигрыш, 70% проигрыш
-
-🎮 Нажми кнопку ниже, чтобы начать играть!'''
+🎯 Нажми кнопку ниже, чтобы начать зарабатывать!'''
                 
                 keyboard = {
                     'inline_keyboard': [[
-                        {'text': '🚀 Играть в РАКЕТУ', 'web_app': {'url': rocket_game_url}}
+                        {'text': '💰 Открыть приложение', 'web_app': {'url': app_url}}
                     ], [
-                        {'text': '📊 Правила игры', 'callback_data': 'rules'}
+                        {'text': '📊 Как это работает?', 'callback_data': 'how_it_works'}
                     ]]
                 }
                 
                 send_telegram_message(bot_token, chat_id, welcome_text, keyboard)
             
-            elif text == '/help':
-                help_text = '''📚 <b>Помощь по боту</b>
-
-/start - Главное меню
-/help - Эта справка
-/app - Открыть приложение
-
-💡 Нажмите "Открыть приложение" для доступа ко всем функциям!'''
-                
-                send_telegram_message(bot_token, chat_id, help_text)
-            
-            else:
-                reply_text = '👋 Используй /start для открытия приложения!'
-                send_telegram_message(bot_token, chat_id, reply_text)
+            cur.close()
+            conn.close()
         
         elif 'callback_query' in body_data:
             callback = body_data['callback_query']
             chat_id = callback['message']['chat']['id']
             callback_data = callback['data']
             
-            if callback_data == 'rules':
-                rules_text = '''📖 <b>Правила игры "РАКЕТА"</b>
+            if callback_data == 'how_it_works':
+                info_text = '''📖 <b>Как работает MLWizard Investment?</b>
 
-🚀 <b>Как играть:</b>
-1. Сделайте ставку (от 1 монеты)
-2. Нажмите "Запуск" - ракета взлетает!
-3. Коэффициент растёт: 1.00x → 1.50x → 2.00x → ...
-4. Нажмите "Забрать" до взрыва ракеты!
+💰 <b>Инвестиции:</b>
+• Минимальная сумма - от 100₽
+• Доходность - 1% в день
+• Начисления каждые 24 часа
 
-💰 <b>Выигрыш:</b>
-Ваша ставка × коэффициент = выигрыш
+💎 <b>Вывод средств:</b>
+• Без комиссий
+• Моментальная обработка
+• На любой кошелёк
 
-💥 <b>Проигрыш:</b>
-Если ракета взорвётся - ставка сгорает
+👥 <b>Партнёрская программа:</b>
+• 10% от инвестиций рефералов
+• Бонусы за активных партнёров
+• Многоуровневая система
 
-📊 <b>Шансы:</b>
-• 70% - ракета взрывается до 1.50x
-• 20% - ракета достигает 1.50x-2.50x
-• 7% - ракета достигает 2.50x-5.00x
-• 3% - ракета достигает 5.00x-15.00x
+📊 <b>Калькулятор доходности:</b>
+Инвестиция 10,000₽ = 100₽/день = 3,000₽/месяц
 
-🎯 <b>Стратегия:</b>
-Забирайте на малых коэффициентах (1.20x-1.50x) для частых выигрышей!'''
+🎯 Начни зарабатывать прямо сейчас!'''
                 
-                send_telegram_message(bot_token, chat_id, rules_text)
+                send_telegram_message(bot_token, chat_id, info_text)
         
         return {
             'statusCode': 200,
@@ -173,7 +195,6 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         webhook_url = 'https://functions.poehali.dev/a71f7786-5cde-465c-8f34-348cbe04c7bf?path=telegram_webhook'
         
         import urllib.request
-        import urllib.parse
         
         url = f'https://api.telegram.org/bot{bot_token}/setWebhook'
         data = json.dumps({'url': webhook_url}).encode('utf-8')
@@ -222,16 +243,134 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     'isBase64Encoded': False
                 }
             
-            cur.execute('SELECT * FROM users WHERE telegram_id = %s', (telegram_id,))
+            calculate_accruals(int(telegram_id), conn)
+            
+            cur.execute('SELECT * FROM telegram_users WHERE user_id = %s', (telegram_id,))
             user = cur.fetchone()
             
             if not user:
                 referral_code = generate_referral_code()
-                cur.execute(
-                    'INSERT INTO users (telegram_id, referral_code, balance) VALUES (%s, %s, %s) RETURNING *',
-                    (telegram_id, referral_code, 1000.00)
-                )
+                cur.execute('''
+                    INSERT INTO telegram_users (user_id, balance, withdraw_balance) 
+                    VALUES (%s, 0, 0) RETURNING *
+                ''', (telegram_id,))
                 user = cur.fetchone()
+                conn.commit()
+            
+            cur.execute('''
+                SELECT SUM(amount) as total_invested, SUM(accumulated) as total_accumulated 
+                FROM investments 
+                WHERE user_id = %s AND is_active = true
+            ''', (telegram_id,))
+            investment_stats = cur.fetchone()
+            
+            cur.close()
+            conn.close()
+            
+            user_data = {
+                'user_id': int(user['user_id']),
+                'username': user.get('username', ''),
+                'balance': float(user['balance']),
+                'withdraw_balance': float(user['withdraw_balance']),
+                'partners_count': int(user['partners_count'])
+            }
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({
+                    'user': user_data,
+                    'total_invested': float(investment_stats['total_invested'] or 0),
+                    'total_accumulated': float(investment_stats['total_accumulated'] or 0)
+                }),
+                'isBase64Encoded': False
+            }
+        
+        if method == 'POST' and path == 'invest':
+            body_data = json.loads(event.get('body', '{}'))
+            telegram_id = body_data.get('telegram_id')
+            amount = float(body_data.get('amount', 0))
+            
+            if amount < 100:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Минимальная сумма инвестиции - 100₽'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute('SELECT balance FROM telegram_users WHERE user_id = %s', (telegram_id,))
+            user = cur.fetchone()
+            
+            if not user or float(user['balance']) < amount:
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Недостаточно средств'}),
+                    'isBase64Encoded': False
+                }
+            
+            cur.execute('''
+                UPDATE telegram_users 
+                SET balance = balance - %s 
+                WHERE user_id = %s
+            ''', (amount, telegram_id))
+            
+            cur.execute('''
+                INSERT INTO investments (user_id, amount, accumulated, is_active) 
+                VALUES (%s, %s, 0, true) RETURNING *
+            ''', (telegram_id, amount))
+            
+            investment = cur.fetchone()
+            
+            cur.execute('''
+                INSERT INTO transactions (user_id, type, amount, status) 
+                VALUES (%s, 'investment', %s, 'completed')
+            ''', (telegram_id, amount))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'success': True, 'investment': dict(investment)}),
+                'isBase64Encoded': False
+            }
+        
+        if method == 'POST' and path == 'collect':
+            body_data = json.loads(event.get('body', '{}'))
+            telegram_id = body_data.get('telegram_id')
+            
+            calculate_accruals(telegram_id, conn)
+            
+            cur.execute('''
+                SELECT SUM(accumulated) as total_accumulated 
+                FROM investments 
+                WHERE user_id = %s AND is_active = true
+            ''', (telegram_id,))
+            result = cur.fetchone()
+            total_accumulated = float(result['total_accumulated'] or 0)
+            
+            if total_accumulated > 0:
+                cur.execute('''
+                    UPDATE telegram_users 
+                    SET withdraw_balance = withdraw_balance + %s 
+                    WHERE user_id = %s
+                ''', (total_accumulated, telegram_id))
+                
+                cur.execute('''
+                    UPDATE investments 
+                    SET accumulated = 0 
+                    WHERE user_id = %s AND is_active = true
+                ''', (telegram_id,))
+                
+                cur.execute('''
+                    INSERT INTO transactions (user_id, type, amount, status) 
+                    VALUES (%s, 'collect', %s, 'completed')
+                ''', (telegram_id, total_accumulated))
+                
                 conn.commit()
             
             cur.close()
@@ -240,26 +379,21 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps(dict(user), default=str),
+                'body': json.dumps({'success': True, 'collected': total_accumulated}),
                 'isBase64Encoded': False
             }
         
-        elif method == 'GET' and path == 'transactions':
-            user_id = event.get('queryStringParameters', {}).get('user_id')
+        if method == 'GET' and path == 'investments':
+            telegram_id = event.get('queryStringParameters', {}).get('telegram_id')
             
-            if not user_id:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'user_id is required'}),
-                    'isBase64Encoded': False
-                }
+            calculate_accruals(int(telegram_id), conn)
             
-            cur.execute(
-                'SELECT * FROM transactions WHERE user_id = %s ORDER BY created_at DESC LIMIT 50',
-                (user_id,)
-            )
-            transactions = cur.fetchall()
+            cur.execute('''
+                SELECT * FROM investments 
+                WHERE user_id = %s AND is_active = true 
+                ORDER BY start_date DESC
+            ''', (telegram_id,))
+            investments = cur.fetchall()
             
             cur.close()
             conn.close()
@@ -267,160 +401,36 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 200,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps([dict(t) for t in transactions], default=str),
+                'body': json.dumps({'investments': [dict(inv) for inv in investments]}, default=str),
                 'isBase64Encoded': False
             }
         
-        elif method == 'POST' and path == 'transaction':
-            body_data = json.loads(event.get('body', '{}'))
-            user_id = body_data.get('user_id')
-            trans_type = body_data.get('type')
-            amount = body_data.get('amount')
-            description = body_data.get('description', '')
-            
-            if not all([user_id, trans_type, amount]):
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'user_id, type and amount are required'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute(
-                'INSERT INTO transactions (user_id, type, amount, description, status) VALUES (%s, %s, %s, %s, %s) RETURNING *',
-                (user_id, trans_type, amount, description, 'completed')
-            )
-            transaction = cur.fetchone()
-            
-            if trans_type in ['card_bonus', 'referral_bonus', 'deposit']:
-                cur.execute(
-                    'UPDATE users SET balance = balance + %s, total_earned = total_earned + %s WHERE id = %s',
-                    (amount, amount, user_id)
-                )
-            elif trans_type in ['withdrawal', 'boost_payment']:
-                cur.execute(
-                    'UPDATE users SET balance = balance - %s WHERE id = %s',
-                    (amount, user_id)
-                )
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps(dict(transaction), default=str),
-                'isBase64Encoded': False
-            }
-        
-        elif method == 'POST' and path == 'rocket_start':
+        if method == 'POST' and path == 'withdraw':
             body_data = json.loads(event.get('body', '{}'))
             telegram_id = body_data.get('telegram_id')
-            bet_amount = float(body_data.get('bet_amount', 0))
+            amount = float(body_data.get('amount', 0))
             
-            if not telegram_id or bet_amount <= 0:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Invalid parameters'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute('SELECT id, balance FROM users WHERE telegram_id = %s', (telegram_id,))
+            cur.execute('SELECT withdraw_balance FROM telegram_users WHERE user_id = %s', (telegram_id,))
             user = cur.fetchone()
             
-            if not user:
-                cur.close()
-                conn.close()
-                return {
-                    'statusCode': 404,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'User not found'}),
-                    'isBase64Encoded': False
-                }
-            
-            if float(user['balance']) < bet_amount:
-                cur.close()
-                conn.close()
+            if not user or float(user['withdraw_balance']) < amount:
                 return {
                     'statusCode': 400,
                     'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Insufficient balance'}),
+                    'body': json.dumps({'error': 'Недостаточно средств для вывода'}),
                     'isBase64Encoded': False
                 }
             
-            crash_point = generate_crash_point()
+            cur.execute('''
+                UPDATE telegram_users 
+                SET withdraw_balance = withdraw_balance - %s 
+                WHERE user_id = %s
+            ''', (amount, telegram_id))
             
-            cur.execute('UPDATE users SET balance = balance - %s WHERE id = %s', (bet_amount, user['id']))
-            conn.commit()
-            
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'crash_point': crash_point, 'user_id': user['id']}),
-                'isBase64Encoded': False
-            }
-        
-        elif method == 'POST' and path == 'rocket_cashout':
-            body_data = json.loads(event.get('body', '{}'))
-            user_id = body_data.get('user_id')
-            bet_amount = float(body_data.get('bet_amount', 0))
-            multiplier = float(body_data.get('multiplier', 0))
-            crash_point = float(body_data.get('crash_point', 0))
-            
-            if not user_id or bet_amount <= 0 or multiplier <= 0:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Invalid parameters'}),
-                    'isBase64Encoded': False
-                }
-            
-            profit = round(bet_amount * multiplier, 2)
-            net_profit = round(profit - bet_amount, 2)
-            
-            cur.execute('UPDATE users SET balance = balance + %s WHERE id = %s', (profit, user_id))
-            
-            cur.execute(
-                '''INSERT INTO rocket_games (user_id, bet_amount, multiplier, crash_point, profit, won)
-                   VALUES (%s, %s, %s, %s, %s, %s)''',
-                (user_id, bet_amount, multiplier, crash_point, net_profit, True)
-            )
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'success': True, 'profit': profit, 'net_profit': net_profit}),
-                'isBase64Encoded': False
-            }
-        
-        elif method == 'POST' and path == 'rocket_lost':
-            body_data = json.loads(event.get('body', '{}'))
-            user_id = body_data.get('user_id')
-            bet_amount = float(body_data.get('bet_amount', 0))
-            crash_point = float(body_data.get('crash_point', 0))
-            
-            if not user_id or bet_amount <= 0:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Invalid parameters'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute(
-                '''INSERT INTO rocket_games (user_id, bet_amount, multiplier, crash_point, profit, won)
-                   VALUES (%s, %s, %s, %s, %s, %s)''',
-                (user_id, bet_amount, crash_point, crash_point, -bet_amount, False)
-            )
+            cur.execute('''
+                INSERT INTO transactions (user_id, type, amount, status) 
+                VALUES (%s, 'withdrawal', %s, 'pending')
+            ''', (telegram_id, amount))
             
             conn.commit()
             cur.close()
@@ -433,144 +443,13 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
         
-        elif method == 'GET' and path == 'rocket_history':
-            telegram_id = event.get('queryStringParameters', {}).get('telegram_id')
-            
-            if not telegram_id:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'telegram_id required'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute('SELECT id FROM users WHERE telegram_id = %s', (telegram_id,))
-            user = cur.fetchone()
-            
-            if not user:
-                cur.close()
-                conn.close()
-                return {
-                    'statusCode': 404,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'User not found'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute(
-                '''SELECT * FROM rocket_games WHERE user_id = %s 
-                   ORDER BY created_at DESC LIMIT 20''',
-                (user['id'],)
-            )
-            games = cur.fetchall()
-            
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps([dict(g) for g in games], default=str),
-                'isBase64Encoded': False
-            }
-        
-        elif method == 'GET' and path == 'rocket_balance':
-            telegram_id = event.get('queryStringParameters', {}).get('telegram_id')
-            
-            if not telegram_id:
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'telegram_id required'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute('SELECT balance FROM users WHERE telegram_id = %s', (telegram_id,))
-            user = cur.fetchone()
-            
-            if not user:
-                referral_code = generate_referral_code()
-                cur.execute(
-                    'INSERT INTO users (telegram_id, referral_code, balance) VALUES (%s, %s, %s) RETURNING balance',
-                    (telegram_id, referral_code, 1000.00)
-                )
-                user = cur.fetchone()
-                conn.commit()
-            
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'balance': float(user['balance'])}),
-                'isBase64Encoded': False
-            }
-        
-        elif method == 'POST' and path == 'boost':
-            body_data = json.loads(event.get('body', '{}'))
-            user_id = body_data.get('user_id')
-            service_type = body_data.get('service_type')
-            platform = body_data.get('platform')
-            target_url = body_data.get('target_url')
-            quantity = body_data.get('quantity')
-            price = body_data.get('price')
-            
-            if not all([user_id, service_type, platform, target_url, quantity, price]):
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'All fields are required'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute('SELECT balance FROM users WHERE id = %s', (user_id,))
-            user = cur.fetchone()
-            
-            if not user or float(user['balance']) < float(price):
-                cur.close()
-                conn.close()
-                return {
-                    'statusCode': 400,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Insufficient balance'}),
-                    'isBase64Encoded': False
-                }
-            
-            cur.execute(
-                'INSERT INTO boost_orders (user_id, service_type, platform, target_url, quantity, price) VALUES (%s, %s, %s, %s, %s, %s) RETURNING *',
-                (user_id, service_type, platform, target_url, quantity, price)
-            )
-            order = cur.fetchone()
-            
-            cur.execute(
-                'UPDATE users SET balance = balance - %s WHERE id = %s',
-                (price, user_id)
-            )
-            
-            cur.execute(
-                'INSERT INTO transactions (user_id, type, amount, description) VALUES (%s, %s, %s, %s)',
-                (user_id, 'boost_payment', price, f'Заказ накрутки: {service_type} на {platform}')
-            )
-            
-            conn.commit()
-            cur.close()
-            conn.close()
-            
-            return {
-                'statusCode': 200,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps(dict(order), default=str),
-                'isBase64Encoded': False
-            }
-        
         cur.close()
         conn.close()
         
         return {
             'statusCode': 404,
             'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-            'body': json.dumps({'error': 'Endpoint not found'}),
+            'body': json.dumps({'error': 'Not found'}),
             'isBase64Encoded': False
         }
         

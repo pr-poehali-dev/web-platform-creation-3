@@ -3,30 +3,20 @@
     {
       "name": "Получение пользователя по telegram_id",
       "method": "GET",
-      "path": "/?path=user&telegram_id=test123",
+      "path": "/?path=user&telegram_id=123456789",
       "expectedStatus": 200,
       "expectedBody": {
-        "telegram_id": "test123",
-        "referral_code": "string",
-        "balance": "string"
+        "user": "object"
       },
       "bodyMatcher": "partial"
     },
     {
-      "name": "Создание транзакции",
-      "method": "POST",
-      "path": "/?path=transaction",
-      "body": {
-        "user_id": 1,
-        "type": "card_bonus",
-        "amount": 500,
-        "description": "Бонус за карту"
-      },
+      "name": "Получение списка инвестиций",
+      "method": "GET",
+      "path": "/?path=investments&telegram_id=123456789",
       "expectedStatus": 200,
       "expectedBody": {
-        "type": "card_bonus",
-        "amount": "string",
-        "status": "completed"
+        "investments": "array"
       },
       "bodyMatcher": "partial"
     }
