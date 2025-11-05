@@ -98,7 +98,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     
     if path == 'telegram_webhook' and method == 'POST':
         body_data = json.loads(event.get('body', '{}'))
-        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '')
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN', '8016931243:AAE2ywL1OwgWg6Wmf1u24ltU1kOnwz14Jvw')
         
         if 'message' in body_data:
             message = body_data['message']

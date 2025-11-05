@@ -6,6 +6,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Investment from "./pages/Investment";
+import Invest from "./pages/Invest";
+import Wallet from "./pages/Wallet";
+import Partners from "./pages/Partners";
 import TelegramBot from "./pages/TelegramBot";
 import RocketGame from "./pages/RocketGame";
 import NotFound from "./pages/NotFound";
@@ -20,6 +23,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Investment />} />
+          <Route path="/invest" element={<Invest />} />
+          <Route path="/wallet" element={<Wallet />} />
+          <Route path="/partners" element={<Partners />} />
           <Route path="/old" element={<Index />} />
           <Route path="/bot" element={<TelegramBot />} />
           <Route path="/rocket" element={<RocketGame />} />
